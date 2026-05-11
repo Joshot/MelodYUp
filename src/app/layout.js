@@ -3,7 +3,7 @@ import './globals.css'
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Hyvaroo — Chord & Key Analyzer',
+  title: 'MelodYUp — Chord & Key Analyzer',
   description: 'Detect chords, key, and BPM from any YouTube song. Built by Hyvaroo Labs.',
 }
 
