@@ -2,151 +2,155 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
 
 export default function LibraryPage() {
-  const router = useRouter()
-  const [user, setUser] = useState(null)
   const [songs, setSongs] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterKey, setFilterKey] = useState('')
-  const [filterTab, setFilterTab] = useState('semua')
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) { router.replace('/'); return }
-      setUser(session.user)
-      fetchSongs(session.user.id)
-    })
+    fetchSongs()
   }, [])
 
-  const fetchSongs = async (uid) => {
+  const fetchSongs = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('songs')
-      .select('*')
-      .eq('user_id', uid)
-      .order('created_at', { ascending: false })
-    if (!error) setSongs(data || [])
+    try {
+      const { data } = await supabase
+        .from('songs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50)
+      setSongs(data || [])
+    } catch (e) {
+      setSongs([])
+    }
     setLoading(false)
-  }
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.replace('/')
   }
 
   const keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
   const filtered = songs.filter(s => {
-    const matchSearch = s.title.toLowerCase().includes(search.toLowerCase())
-    const matchKey = filterKey ? s.key_note === filterKey : true
-    const matchTab = filterTab === 'favorit' ? s.is_favorite : true
-    return matchSearch && matchKey && matchTab
+    const matchSearch = !search || s.title.toLowerCase().includes(search.toLowerCase())
+    const matchKey = !filterKey || s.key_note === filterKey
+    return matchSearch && matchKey
   })
 
   const formatDuration = (sec) => {
-    if (!sec) return '--:--'
-    const m = Math.floor(sec / 60)
-    const s = sec % 60
-    return `${m}:${s.toString().padStart(2, '0')}`
+    if (!sec) return null
+    return `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-[#f1f5f9] flex">
-      <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 bg-[#12121a] border-r border-[#1e1e2e] p-6">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-cyan-500 rounded-lg flex items-center justify-center font-bold text-sm">M</div>
-          <span className="font-bold text-lg">MelodYUp</span>
-        </div>
-        <nav className="space-y-1 mb-6">
-          {[['semua', '🎵', 'Semua Lagu'], ['favorit', '❤️', 'Favorit']].map(([id, icon, label]) => (
-            <button key={id} onClick={() => setFilterTab(id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                filterTab === id ? 'bg-violet-600 text-white' : 'text-[#64748b] hover:text-white hover:bg-[#1e1e2e]'
-              }`}>{icon} {label}</button>
-          ))}
-        </nav>
-        <div className="mb-6">
-          <p className="text-xs text-[#64748b] font-semibold uppercase tracking-wider mb-2 px-1">Filter Kunci</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button onClick={() => setFilterKey('')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                filterKey === '' ? 'bg-violet-600 text-white' : 'bg-[#1e1e2e] text-[#64748b] hover:text-white'
-              }`}>Semua</button>
-            {keys.map(k => (
-              <button key={k} onClick={() => setFilterKey(k)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                  filterKey === k ? 'bg-violet-600 text-white' : 'bg-[#1e1e2e] text-[#64748b] hover:text-white'
-                }`}>{k}</button>
-            ))}
+    <div className="min-h-screen bg-white text-[#0F172A]">
+      <nav className="border-b border-[#E2E8F0] px-6 py-4 flex items-center justify-between bg-white sticky top-0 z-50">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#4F8CFF] to-[#7C3AED] flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+            </svg>
           </div>
-        </div>
-        <div className="mt-auto space-y-2">
-          <Link href="/upload" className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition w-full">
-            + Analisis Lagu Baru
-          </Link>
-          <button onClick={handleLogout} className="w-full text-[#64748b] hover:text-red-400 text-sm py-2 transition">Keluar</button>
-        </div>
-      </aside>
+          <span className="font-bold text-lg">Hyvaroo</span>
+        </Link>
+        <Link href="/analyze"
+          className="bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] text-white px-5 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
+          Analyze Song
+        </Link>
+      </nav>
 
-      <main className="flex-1 p-6 md:p-8">
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+      <div className="max-w-7xl mx-auto px-4 py-10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
           <div>
-            <h1 className="text-2xl font-bold">Library Saya</h1>
-            <p className="text-[#64748b] text-sm">{songs.length} lagu tersimpan</p>
+            <h1 className="text-3xl font-black">Song Library</h1>
+            <p className="text-[#475569] mt-1">{songs.length} analyzed songs</p>
           </div>
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Cari lagu..."
-            className="bg-[#1e1e2e] border border-[#2e2e3e] rounded-xl text-white placeholder:text-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none px-4 py-2 text-sm w-full md:w-64" />
+          <div className="flex gap-3 flex-wrap">
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search songs..."
+              className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-[#0F172A] placeholder:text-[#94A3B8] focus:ring-2 focus:ring-[#4F8CFF] focus:outline-none px-4 py-2.5 text-sm w-56 transition" />
+          </div>
+        </div>
+
+        {/* Key filter */}
+        <div className="flex gap-2 flex-wrap mb-8">
+          <button onClick={() => setFilterKey('')}
+            className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition ${
+              filterKey === '' ? 'bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] text-white shadow-sm' : 'bg-[#F1F5F9] text-[#475569] hover:text-[#0F172A]'
+            }`}>All Keys</button>
+          {keys.map(k => (
+            <button key={k} onClick={() => setFilterKey(k)}
+              className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition ${
+                filterKey === k ? 'bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] text-white shadow-sm' : 'bg-[#F1F5F9] text-[#475569] hover:text-[#0F172A]'
+              }`}>{k}</button>
+          ))}
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-[#12121a] border border-[#1e1e2e] rounded-2xl overflow-hidden animate-pulse">
-                <div className="h-40 bg-[#1e1e2e]" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl overflow-hidden animate-pulse">
+                <div className="h-36 bg-[#E2E8F0]" />
                 <div className="p-4 space-y-2">
-                  <div className="h-4 bg-[#2e2e3e] rounded w-3/4" />
-                  <div className="h-3 bg-[#2e2e3e] rounded w-1/2" />
+                  <div className="h-4 bg-[#E2E8F0] rounded w-3/4" />
+                  <div className="h-3 bg-[#E2E8F0] rounded w-1/2" />
                 </div>
               </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 text-center">
-            <div className="text-6xl mb-4">🎵</div>
-            <h3 className="text-xl font-semibold mb-2">Belum ada lagu</h3>
-            <p className="text-[#64748b] mb-6">Mulai analisis lagu pertamamu dari YouTube</p>
-            <Link href="/upload" className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-6 py-2.5 font-semibold transition">Analisis Sekarang</Link>
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-50 to-purple-50 rounded-3xl flex items-center justify-center mb-6">
+              <svg className="w-10 h-10 text-[#4F8CFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold mb-2">No songs yet</h3>
+            <p className="text-[#475569] mb-6">Analyze your first song to see it here</p>
+            <Link href="/analyze"
+              className="bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] text-white rounded-xl px-6 py-2.5 font-bold text-sm hover:opacity-90 transition">
+              Analyze a Song
+            </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {filtered.map(song => (
-              <div key={song.id} className="bg-[#12121a] border border-[#1e1e2e] rounded-2xl overflow-hidden hover:border-violet-500/40 transition group">
-                <div className="relative h-40 bg-[#1e1e2e]">
-                  {song.thumbnail && <Image src={song.thumbnail} alt={song.title} fill className="object-cover" />}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  {song.is_favorite && <span className="absolute top-2 right-2">❤️</span>}
+              <Link key={song.id} href={`/player/${song.id}`}
+                className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden hover:shadow-lg hover:border-blue-200 transition-all duration-300 group block">
+                <div className="relative h-36 bg-[#F8FAFC]">
+                  {song.thumbnail ? (
+                    <Image src={song.thumbnail} alt={song.title} fill className="object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <svg className="w-10 h-10 text-[#CBD5E1]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                 </div>
                 <div className="p-4">
-                  <h3 className="font-semibold text-sm mb-2 line-clamp-2">{song.title}</h3>
-                  <div className="flex gap-2 flex-wrap mb-3">
-                    {song.key_note && <span className="bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded-full px-2.5 py-0.5 text-xs font-semibold">{song.key_note} {song.key_scale}</span>}
-                    {song.bpm && <span className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-full px-2.5 py-0.5 text-xs font-semibold">{song.bpm} BPM</span>}
-                    {song.duration && <span className="bg-[#1e1e2e] text-[#64748b] rounded-full px-2.5 py-0.5 text-xs">{formatDuration(song.duration)}</span>}
+                  <h3 className="font-bold text-sm mb-2 line-clamp-2 group-hover:text-[#4F8CFF] transition">{song.title}</h3>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {song.key_note && (
+                      <span className="bg-gradient-to-r from-blue-50 to-purple-50 text-[#4F8CFF] border border-blue-200 rounded-lg px-2.5 py-0.5 text-xs font-bold">
+                        {song.key_note} {song.key_scale}
+                      </span>
+                    )}
+                    {song.bpm && (
+                      <span className="bg-[#F1F5F9] text-[#475569] rounded-lg px-2.5 py-0.5 text-xs font-semibold">
+                        {song.bpm} BPM
+                      </span>
+                    )}
                   </div>
-                  <Link href={`/player/${song.id}`} className="block w-full text-center bg-violet-600 hover:bg-violet-500 text-white rounded-xl py-2 text-sm font-semibold transition">Lihat Detail</Link>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }

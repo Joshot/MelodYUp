@@ -4,10 +4,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        base: '#0a0a0f',
-        surface: '#12121a',
-        border: '#1e1e2e',
-        input: '#1e1e2e',
+        base: '#FFFFFF',
+        surface: '#F8FAFC',
+        border: '#E2E8F0',
+        accent: '#4F8CFF',
+        purple: '#7C3AED',
+        textPrimary: '#0F172A',
+        textSecondary: '#475569',
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
