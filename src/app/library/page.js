@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -56,24 +58,19 @@ export default function LibraryPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#f1f5f9] flex">
-      {/* Sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 bg-[#12121a] border-r border-[#1e1e2e] p-6">
         <div className="flex items-center gap-2 mb-8">
           <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-cyan-500 rounded-lg flex items-center justify-center font-bold text-sm">M</div>
           <span className="font-bold text-lg">MelodYUp</span>
         </div>
-
         <nav className="space-y-1 mb-6">
           {[['semua', '🎵', 'Semua Lagu'], ['favorit', '❤️', 'Favorit']].map(([id, icon, label]) => (
             <button key={id} onClick={() => setFilterTab(id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
                 filterTab === id ? 'bg-violet-600 text-white' : 'text-[#64748b] hover:text-white hover:bg-[#1e1e2e]'
-              }`}>
-              {icon} {label}
-            </button>
+              }`}>{icon} {label}</button>
           ))}
         </nav>
-
         <div className="mb-6">
           <p className="text-xs text-[#64748b] font-semibold uppercase tracking-wider mb-2 px-1">Filter Kunci</p>
           <div className="flex flex-wrap gap-1.5">
@@ -89,18 +86,14 @@ export default function LibraryPage() {
             ))}
           </div>
         </div>
-
         <div className="mt-auto space-y-2">
-          <Link href="/upload"
-            className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition w-full">
+          <Link href="/upload" className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition w-full">
             + Analisis Lagu Baru
           </Link>
-          <button onClick={handleLogout}
-            className="w-full text-[#64748b] hover:text-red-400 text-sm py-2 transition">Keluar</button>
+          <button onClick={handleLogout} className="w-full text-[#64748b] hover:text-red-400 text-sm py-2 transition">Keluar</button>
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 p-6 md:p-8">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <div>
@@ -118,8 +111,8 @@ export default function LibraryPage() {
               <div key={i} className="bg-[#12121a] border border-[#1e1e2e] rounded-2xl overflow-hidden animate-pulse">
                 <div className="h-40 bg-[#1e1e2e]" />
                 <div className="p-4 space-y-2">
-                  <div className="h-4 bg-[#1e1e2e] rounded w-3/4" />
-                  <div className="h-3 bg-[#1e1e2e] rounded w-1/2" />
+                  <div className="h-4 bg-[#2e2e3e] rounded w-3/4" />
+                  <div className="h-3 bg-[#2e2e3e] rounded w-1/2" />
                 </div>
               </div>
             ))}
@@ -129,45 +122,25 @@ export default function LibraryPage() {
             <div className="text-6xl mb-4">🎵</div>
             <h3 className="text-xl font-semibold mb-2">Belum ada lagu</h3>
             <p className="text-[#64748b] mb-6">Mulai analisis lagu pertamamu dari YouTube</p>
-            <Link href="/upload"
-              className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-6 py-2.5 font-semibold transition">
-              Analisis Sekarang
-            </Link>
+            <Link href="/upload" className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-6 py-2.5 font-semibold transition">Analisis Sekarang</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(song => (
               <div key={song.id} className="bg-[#12121a] border border-[#1e1e2e] rounded-2xl overflow-hidden hover:border-violet-500/40 transition group">
                 <div className="relative h-40 bg-[#1e1e2e]">
-                  {song.thumbnail && (
-                    <Image src={song.thumbnail} alt={song.title} fill className="object-cover" />
-                  )}
+                  {song.thumbnail && <Image src={song.thumbnail} alt={song.title} fill className="object-cover" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  {song.is_favorite && <span className="absolute top-2 right-2 text-red-400">❤️</span>}
+                  {song.is_favorite && <span className="absolute top-2 right-2">❤️</span>}
                 </div>
                 <div className="p-4">
                   <h3 className="font-semibold text-sm mb-2 line-clamp-2">{song.title}</h3>
                   <div className="flex gap-2 flex-wrap mb-3">
-                    {song.key_note && (
-                      <span className="bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded-full px-2.5 py-0.5 text-xs font-semibold">
-                        {song.key_note} {song.key_scale}
-                      </span>
-                    )}
-                    {song.bpm && (
-                      <span className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-full px-2.5 py-0.5 text-xs font-semibold">
-                        {song.bpm} BPM
-                      </span>
-                    )}
-                    {song.duration && (
-                      <span className="bg-[#1e1e2e] text-[#64748b] rounded-full px-2.5 py-0.5 text-xs">
-                        {formatDuration(song.duration)}
-                      </span>
-                    )}
+                    {song.key_note && <span className="bg-violet-600/20 text-violet-400 border border-violet-500/30 rounded-full px-2.5 py-0.5 text-xs font-semibold">{song.key_note} {song.key_scale}</span>}
+                    {song.bpm && <span className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-full px-2.5 py-0.5 text-xs font-semibold">{song.bpm} BPM</span>}
+                    {song.duration && <span className="bg-[#1e1e2e] text-[#64748b] rounded-full px-2.5 py-0.5 text-xs">{formatDuration(song.duration)}</span>}
                   </div>
-                  <Link href={`/player/${song.id}`}
-                    className="block w-full text-center bg-violet-600 hover:bg-violet-500 text-white rounded-xl py-2 text-sm font-semibold transition">
-                    Lihat Detail
-                  </Link>
+                  <Link href={`/player/${song.id}`} className="block w-full text-center bg-violet-600 hover:bg-violet-500 text-white rounded-xl py-2 text-sm font-semibold transition">Lihat Detail</Link>
                 </div>
               </div>
             ))}
