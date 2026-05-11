@@ -1,6 +1,6 @@
+'use client'
 export const dynamic = 'force-dynamic'
 
-'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -42,7 +42,7 @@ export default function UploadPage() {
     const id = getYouTubeId(url)
     if (!id || !isValidUrl(url)) { setError('URL YouTube tidak valid'); return }
     setVideoId(id)
-    setVideoTitle('Sedang memuat judul...')
+    setVideoTitle('Lagu dari YouTube')
     setError('')
     setStep(2)
     setProgress(0)
