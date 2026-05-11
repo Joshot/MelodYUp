@@ -1,354 +1,281 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
-
-// Real chord maps per key
-const CHORD_MAP = {
-  'C':   { scale: 'major',         chords: ['C', 'Am', 'F', 'G', 'C', 'Em', 'F', 'G', 'C', 'Am', 'Dm', 'G', 'C', 'F', 'G', 'C'], capo: 0 },
-  'G':   { scale: 'major',         chords: ['G', 'Em', 'C', 'D', 'G', 'Bm', 'C', 'D', 'G', 'Em', 'Am', 'D', 'G', 'C', 'D', 'G'], capo: 0 },
-  'D':   { scale: 'major',         chords: ['D', 'Bm', 'G', 'A', 'D', 'F#m', 'G', 'A', 'D', 'Bm', 'Em', 'A', 'D', 'G', 'A', 'D'], capo: 0 },
-  'A':   { scale: 'major',         chords: ['A', 'F#m', 'D', 'E', 'A', 'C#m', 'D', 'E', 'A', 'F#m', 'Bm', 'E', 'A', 'D', 'E', 'A'], capo: 2 },
-  'E':   { scale: 'major',         chords: ['E', 'C#m', 'A', 'B', 'E', 'G#m', 'A', 'B', 'E', 'C#m', 'F#m', 'B', 'E', 'A', 'B', 'E'], capo: 4 },
-  'F':   { scale: 'major',         chords: ['F', 'Dm', 'Bb', 'C', 'F', 'Am', 'Bb', 'C', 'F', 'Dm', 'Gm', 'C', 'F', 'Bb', 'C', 'F'], capo: 0 },
-  'Bb':  { scale: 'major',         chords: ['Bb', 'Gm', 'Eb', 'F', 'Bb', 'Dm', 'Eb', 'F', 'Bb', 'Gm', 'Cm', 'F', 'Bb', 'Eb', 'F', 'Bb'], capo: 0 },
-  'Am':  { scale: 'natural minor',  chords: ['Am', 'F', 'C', 'G', 'Am', 'Em', 'F', 'G', 'Am', 'Dm', 'F', 'E', 'Am', 'G', 'F', 'E'], capo: 0 },
-  'Em':  { scale: 'natural minor',  chords: ['Em', 'C', 'G', 'D', 'Em', 'Bm', 'C', 'D', 'Em', 'Am', 'C', 'B', 'Em', 'D', 'C', 'B'], capo: 0 },
-  'Dm':  { scale: 'natural minor',  chords: ['Dm', 'Bb', 'F', 'C', 'Dm', 'Am', 'Bb', 'C', 'Dm', 'Gm', 'Bb', 'A', 'Dm', 'C', 'Bb', 'A'], capo: 0 },
-  'Bm':  { scale: 'natural minor',  chords: ['Bm', 'G', 'D', 'A', 'Bm', 'F#m', 'G', 'A', 'Bm', 'Em', 'G', 'F#', 'Bm', 'A', 'G', 'F#'], capo: 2 },
-  'C#m': { scale: 'natural minor',  chords: ['C#m', 'A', 'E', 'B', 'C#m', 'G#m', 'A', 'B', 'C#m', 'F#m', 'A', 'G#', 'C#m', 'B', 'A', 'G#'], capo: 4 },
-  'F#m': { scale: 'natural minor',  chords: ['F#m', 'D', 'A', 'E', 'F#m', 'C#m', 'D', 'E', 'F#m', 'Bm', 'D', 'C#', 'F#m', 'E', 'D', 'C#'], capo: 2 },
-}
-
-const KEY_LIST = Object.keys(CHORD_MAP)
-
-function getYouTubeId(url) {
-  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/)
-  return match ? match[1] : null
-}
-
-function isValidUrl(u) {
-  return /(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}/.test(u)
-}
-
-// Deterministic key detection per video ID
-function detectKey(videoId) {
-  let sum = 0
-  for (let i = 0; i < videoId.length; i++) sum += videoId.charCodeAt(i) * (i + 1)
-  return KEY_LIST[sum % KEY_LIST.length]
-}
-
-function detectBPM(videoId) {
-  let sum = 0
-  for (let i = 0; i < videoId.length; i++) sum += videoId.charCodeAt(i) * (i + 3)
-  const bpms = [70, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 138, 144]
-  return bpms[sum % bpms.length]
-}
 
 export default function UploadPage() {
   const router = useRouter()
-  const [step, setStep] = useState(1)
-  const [url, setUrl] = useState('')
-  const [videoId, setVideoId] = useState(null)
+  const fileRef = useRef(null)
+  const [step, setStep] = useState(1) // 1=input, 2=analyzing, 3=result
+  const [file, setFile] = useState(null)
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
   const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [error, setError] = useState('')
-  const [activeChord, setActiveChord] = useState(0)
+  const [dragOver, setDragOver] = useState(false)
 
-  const handleAnalyze = () => {
-    const id = getYouTubeId(url)
-    if (!id || !isValidUrl(url)) { setError('Masukkan URL YouTube yang valid'); return }
+  const handleFile = (f) => {
+    if (!f) return
+    if (!f.type.startsWith('audio/')) { setError('File harus berformat audio (MP3, WAV, M4A, OGG)'); return }
+    if (f.size > 50 * 1024 * 1024) { setError('File maksimal 50MB'); return }
+    setFile(f)
     setError('')
-    setVideoId(id)
+  }
+
+  const handleAnalyze = async () => {
+    if (!file) { setError('Pilih file audio terlebih dahulu'); return }
+    setError('')
     setStep(2)
     setProgress(0)
-    setSaved(false)
-
-    const key = detectKey(id)
-    const bpm = detectBPM(id)
-    const data = CHORD_MAP[key]
 
     const stages = [
-      { label: 'Mengekstrak audio stream...', pct: 15 },
-      { label: 'Menganalisis frekuensi...', pct: 35 },
-      { label: 'Mendeteksi pitch class...', pct: 55 },
-      { label: 'Menghitung chord progression...', pct: 75 },
-      { label: 'Mengidentifikasi kunci & skala...', pct: 90 },
-      { label: 'Menyempurnakan hasil...', pct: 100 },
+      { label: 'Membaca file audio...', pct: 10 },
+      { label: 'Mengirim ke AI engine...', pct: 25 },
+      { label: 'Mendeteksi nada & melodi...', pct: 50 },
+      { label: 'Menganalisis chord progression...', pct: 75 },
+      { label: 'Menentukan kunci & skala...', pct: 90 },
+      { label: 'Menyempurnakan hasil...', pct: 98 },
     ]
 
-    let i = 0
-    const interval = setInterval(() => {
-      if (i < stages.length) {
-        setProgressLabel(stages[i].label)
-        setProgress(stages[i].pct)
-        i++
-      } else {
-        clearInterval(interval)
-        setResult({ key_note: key, key_scale: data.scale, bpm, chords: data.chords, capo: data.capo })
-        setStep(3)
-        let ci = 0
-        setInterval(() => { setActiveChord(ci++ % data.chords.length) }, (60000 / bpm) * 2)
+    let stageIdx = 0
+    const stageInterval = setInterval(() => {
+      if (stageIdx < stages.length) {
+        setProgressLabel(stages[stageIdx].label)
+        setProgress(stages[stageIdx].pct)
+        stageIdx++
       }
-    }, 480)
+    }, 3000)
+
+    try {
+      const formData = new FormData()
+      formData.append('audio', file)
+
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        body: formData,
+      })
+
+      clearInterval(stageInterval)
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || 'Analisis gagal')
+      }
+
+      const data = await res.json()
+      setProgress(100)
+      setTimeout(() => {
+        setResult(data)
+        setStep(3)
+      }, 400)
+
+    } catch (err) {
+      clearInterval(stageInterval)
+      setError(err.message)
+      setStep(1)
+    }
   }
 
   const handleSave = async () => {
+    if (!result) return
     setSaving(true)
     setError('')
     try {
-      const { error: dbErr } = await supabase.from('songs').insert({
+      const songData = {
         user_id: '00000000-0000-0000-0000-000000000000',
-        title: `YouTube — ${videoId}`,
-        youtube_url: url,
-        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-        key_note: result.key_note,
-        key_scale: result.key_scale,
+        title: file.name.replace(/\.[^.]+$/, ''),
+        filename: file.name,
+        key_note: result.key,
+        key_scale: result.scale,
         bpm: result.bpm,
-        chords: result.chords,
-      })
+        chords: [...new Set(result.chords.filter(c=>c.chord).map(c=>c.chord))],
+        chord_data: result.chords,
+        total_duration: result.totalDuration,
+        total_beats: result.totalBeats,
+      }
+      const { data, error: dbErr } = await supabase.from('songs').insert(songData).select().single()
       if (dbErr) throw dbErr
       setSaved(true)
-      setTimeout(() => router.push('/library'), 800)
+      setTimeout(() => router.push(`/player/${data.id}`), 700)
     } catch (e) {
       setError('Gagal menyimpan: ' + (e.message || 'coba lagi'))
     }
     setSaving(false)
   }
 
-  const reset = () => { setUrl(''); setStep(1); setResult(null); setVideoId(null); setProgress(0); setSaved(false); setError(''); setActiveChord(0) }
-
-  const CHORD_NOTES = {
-    'C': 'C – E – G', 'Cm': 'C – Eb – G', 'C#m': 'C# – E – G#',
-    'D': 'D – F# – A', 'Dm': 'D – F – A', 'Bm': 'B – D – F#',
-    'E': 'E – G# – B', 'Em': 'E – G – B', 'Eb': 'Eb – G – Bb',
-    'F': 'F – A – C', 'F#': 'F# – A# – C#', 'F#m': 'F# – A – C#',
-    'G': 'G – B – D', 'Gm': 'G – Bb – D', 'Am': 'A – C – E',
-    'A': 'A – C# – E', 'B': 'B – D# – F#', 'Bb': 'Bb – D – F',
-    'G#m': 'G# – B – D#', 'C#': 'C# – F – G#', 'G#': 'G# – C – D#',
-    'F#m': 'F# – A – C#', 'Gm': 'G – Bb – D', 'Cm': 'C – Eb – G',
-  }
+  const reset = () => { setFile(null); setStep(1); setResult(null); setProgress(0); setSaved(false); setError('') }
 
   return (
-    <div className="min-h-screen bg-white text-[#0F172A] flex flex-col">
+    <div className="min-h-screen bg-[#f0fdf4]">
       {/* NAV */}
-      <nav className="border-b border-[#E2E8F0] px-6 py-4 flex items-center justify-between bg-white sticky top-0 z-50">
+      <nav className="bg-white border-b border-green-100 px-4 py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#4F8CFF] to-[#7C3AED] flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-            </svg>
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" /></svg>
           </div>
-          <span className="font-bold text-lg">MelodYUp</span>
+          <span className="font-black text-lg gradient-text">MelodYUp</span>
         </Link>
-        <div className="flex items-center gap-4">
-          <Link href="/library" className="text-[#475569] hover:text-[#0F172A] text-sm font-medium transition">Library</Link>
-        </div>
+        <Link href="/library" className="text-slate-500 hover:text-slate-800 text-sm font-medium px-4 py-2 rounded-xl hover:bg-green-50 transition">Library</Link>
       </nav>
 
-      <div className="flex-1 max-w-3xl w-full mx-auto px-4 py-10">
+      <div className="max-w-2xl mx-auto px-4 py-8">
         {/* STEPPER */}
-        <div className="flex items-center justify-center gap-3 mb-10">
-          {['Input URL', 'Analisis', 'Hasil'].map((s, i) => (
-            <div key={s} className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2 mb-8">
+          {['Upload File','Analyzing','Results'].map((s,i) => (
+            <div key={s} className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  step > i + 1
-                    ? 'bg-green-500 text-white'
-                    : step === i + 1
-                    ? 'bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] text-white shadow-lg shadow-blue-100'
-                    : 'bg-[#F1F5F9] text-[#94A3B8]'
+                  step > i+1 ? 'bg-green-500 text-white' :
+                  step === i+1 ? 'grad-btn shadow' :
+                  'bg-green-50 text-slate-400 border border-green-100'
                 }`}>
-                  {step > i + 1
-                    ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                    : i + 1}
+                  {step > i+1 ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
+                  ) : i+1}
                 </div>
-                <span className={`text-sm font-semibold hidden sm:block ${
-                  step === i + 1 ? 'text-[#0F172A]' : 'text-[#94A3B8]'
-                }`}>{s}</span>
+                <span className={`text-sm font-semibold hidden sm:block ${ step===i+1?'text-slate-700':'text-slate-400' }`}>{s}</span>
               </div>
-              {i < 2 && <div className={`w-10 h-px ${ step > i + 1 ? 'bg-green-400' : 'bg-[#E2E8F0]'}`} />}
+              {i<2 && <div className={`w-8 h-px ${ step>i+1?'bg-green-400':'bg-green-100' }`}/>}
             </div>
           ))}
         </div>
 
-        {/* STEP 1 — INPUT */}
+        {/* STEP 1 — UPLOAD */}
         {step === 1 && (
-          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-8">
-            <h1 className="text-2xl font-black mb-1">Analisis Lagu Baru</h1>
-            <p className="text-[#475569] text-sm mb-7">Paste URL YouTube lagu yang ingin dianalisis. Tidak perlu login.</p>
+          <div className="card">
+            <h1 className="text-2xl font-black mb-1">Analyze New Song</h1>
+            <p className="text-slate-500 text-sm mb-6">Upload an MP3, WAV, M4A, or OGG file. No login required.</p>
             {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm mb-4">{error}</div>}
-            <div className="flex gap-3 mb-4">
-              <input
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
-                placeholder="https://youtube.com/watch?v=..."
-                className="flex-1 bg-white border border-[#E2E8F0] rounded-2xl text-[#0F172A] placeholder:text-[#94A3B8] focus:ring-2 focus:ring-[#4F8CFF] focus:border-[#4F8CFF] focus:outline-none px-4 py-3 text-sm shadow-sm transition"
-              />
-              <button
-                onClick={handleAnalyze}
-                disabled={!url.trim()}
-                className="bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl px-6 py-3 font-bold text-sm hover:opacity-90 transition whitespace-nowrap"
-              >
-                Analisis
-              </button>
-            </div>
-            {getYouTubeId(url) && (
-              <div className="flex gap-4 items-center bg-white border border-[#E2E8F0] rounded-2xl p-3 mb-6 shadow-sm">
-                <div className="relative w-24 h-14 flex-shrink-0 rounded-lg overflow-hidden">
-                  <Image
-                    src={`https://img.youtube.com/vi/${getYouTubeId(url)}/mqdefault.jpg`}
-                    alt="thumbnail" fill className="object-cover"
-                  />
-                </div>
+
+            {/* DROP ZONE */}
+            <div
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]) }}
+              className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition ${
+                dragOver ? 'border-blue-400 bg-blue-50' :
+                file ? 'border-green-400 bg-green-50' :
+                'border-green-200 hover:border-blue-300 hover:bg-blue-50'
+              }`}
+            >
+              <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={e => handleFile(e.target.files[0])} />
+              {file ? (
                 <div>
-                  <p className="font-semibold text-sm">Video terdeteksi</p>
-                  <p className="text-[#475569] text-xs mt-0.5">ID: {getYouTubeId(url)}</p>
+                  <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
+                  </div>
+                  <p className="font-bold text-slate-700">{file.name}</p>
+                  <p className="text-slate-400 text-xs mt-1">{(file.size/1024/1024).toFixed(2)} MB</p>
+                  <button onClick={e => { e.stopPropagation(); setFile(null) }} className="mt-3 text-xs text-red-400 hover:text-red-600 transition">Remove</button>
                 </div>
-              </div>
-            )}
-            <div className="border-t border-[#E2E8F0] pt-6">
-              <p className="text-[#94A3B8] text-xs font-semibold uppercase tracking-widest mb-3">Contoh lagu</p>
-              <div className="flex gap-2 flex-wrap">
-                {[
-                  { label: 'Shape of You — Ed Sheeran', url: 'https://youtube.com/watch?v=JGwWNGJdvx8' },
-                  { label: 'Blinding Lights — The Weeknd', url: 'https://youtube.com/watch?v=4NRXx6U8ABQ' },
-                  { label: 'Someone Like You — Adele', url: 'https://youtube.com/watch?v=hLQl3WQQoQ0' },
-                ].map(ex => (
-                  <button key={ex.label} onClick={() => setUrl(ex.url)}
-                    className="bg-white border border-[#E2E8F0] text-[#475569] rounded-xl px-3 py-1.5 text-xs font-medium hover:border-[#4F8CFF] hover:text-[#4F8CFF] transition">
-                    {ex.label}
-                  </button>
-                ))}
-              </div>
+              ) : (
+                <div>
+                  <div className="w-14 h-14 bg-green-50 border-2 border-green-200 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-7 h-7 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                  </div>
+                  <p className="font-semibold text-slate-600">Drag & drop audio file here</p>
+                  <p className="text-slate-400 text-xs mt-1">or click to browse</p>
+                  <p className="text-slate-300 text-xs mt-3">MP3 · WAV · M4A · OGG · max 50MB</p>
+                </div>
+              )}
             </div>
+
+            <button
+              onClick={handleAnalyze}
+              disabled={!file}
+              className="grad-btn w-full py-3.5 rounded-2xl font-bold mt-4 text-base"
+            >
+              Analyze Song
+            </button>
           </div>
         )}
 
-        {/* STEP 2 — LOADING */}
+        {/* STEP 2 — ANALYZING */}
         {step === 2 && (
-          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-12 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#4F8CFF] to-[#7C3AED] flex items-center justify-center mx-auto mb-8 shadow-lg shadow-blue-100">
-              <svg className="w-9 h-9 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+          <div className="card text-center py-12">
+            <div className="w-20 h-20 grad-btn rounded-3xl flex items-center justify-center mx-auto mb-7 shadow-lg">
+              <svg className="w-9 h-9 text-white spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
               </svg>
             </div>
-            <h2 className="text-2xl font-black mb-2">Menganalisis lagu...</h2>
-            <p className="text-[#475569] text-sm mb-2">{progressLabel}</p>
-            <div className="max-w-sm mx-auto mt-6">
-              <div className="bg-[#E2E8F0] rounded-full h-2 overflow-hidden mb-2">
-                <div className="h-full progress-bar rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+            <h2 className="text-2xl font-black mb-2">Analyzing your song...</h2>
+            <p className="text-slate-400 text-sm mb-1">{progressLabel}</p>
+            <p className="text-slate-300 text-xs mb-7">This may take 30–90 seconds depending on file size</p>
+            <div className="max-w-xs mx-auto">
+              <div className="bg-green-100 rounded-full h-2.5 overflow-hidden mb-2">
+                <div className="prog-bar h-full" style={{ width: `${progress}%` }}/>
               </div>
-              <p className="text-[#94A3B8] text-xs">{progress}%</p>
+              <p className="text-slate-400 text-xs">{progress}%</p>
             </div>
           </div>
         )}
 
-        {/* STEP 3 — HASIL */}
+        {/* STEP 3 — RESULT */}
         {step === 3 && result && (
-          <div className="space-y-5">
-            {/* Video embed */}
-            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl overflow-hidden shadow-sm">
-              <div className="aspect-video">
-                <iframe
-                  src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+          <div className="space-y-4 fade-in-up">
+            {/* Key / BPM / Scale */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="grad-btn rounded-2xl p-4 text-center text-white shadow">
+                <p className="text-green-100 text-xs font-bold uppercase tracking-wider mb-1">Key</p>
+                <p className="text-3xl font-black">{result.key}</p>
+                <p className="text-green-100 text-xs capitalize">{result.scale}</p>
+              </div>
+              <div className="card text-center">
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">BPM</p>
+                <p className="text-3xl font-black gradient-text">{result.bpm}</p>
+              </div>
+              <div className="card text-center">
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Beats</p>
+                <p className="text-3xl font-black gradient-text">{result.totalBeats}</p>
               </div>
             </div>
 
-            {/* Key + BPM */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-1 bg-gradient-to-br from-[#4F8CFF] to-[#7C3AED] rounded-3xl p-6 text-white text-center">
-                <p className="text-blue-100 text-xs font-bold uppercase tracking-widest mb-2">Kunci</p>
-                <p className="text-4xl font-black">{result.key_note}</p>
-                <p className="text-blue-100 text-sm capitalize mt-1">{result.key_scale}</p>
-              </div>
-              <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-6 text-center">
-                <p className="text-[#475569] text-xs font-bold uppercase tracking-widest mb-2">BPM</p>
-                <p className="text-4xl font-black gradient-text">{result.bpm}</p>
-              </div>
-              <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-6 text-center">
-                <p className="text-[#475569] text-xs font-bold uppercase tracking-widest mb-2">Capo</p>
-                <p className="text-4xl font-black gradient-text">{result.capo === 0 ? 'Tidak' : `Fret ${result.capo}`}</p>
-              </div>
-            </div>
-
-            {/* Chord Progression — Chordify style */}
-            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="font-bold text-lg">Chord Progression</p>
-                  <p className="text-[#475569] text-xs">Chord yang aktif bergerak sesuai BPM</p>
-                </div>
-                <span className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 text-[#4F8CFF] text-xs font-bold px-3 py-1.5 rounded-full">
-                  {result.chords.length} chord
-                </span>
-              </div>
-              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                {result.chords.map((c, i) => (
-                  <div
-                    key={i}
-                    onClick={() => setActiveChord(i)}
-                    className={`chord-box aspect-square flex flex-col items-center justify-center rounded-2xl border-2 font-black text-sm cursor-pointer select-none ${
-                      i === activeChord
-                        ? 'active'
-                        : 'bg-white border-[#E2E8F0] text-[#0F172A] hover:border-[#4F8CFF]'
-                    }`}
-                  >
-                    {c}
-                    <span className="text-[10px] font-normal opacity-50 mt-0.5">{i + 1}</span>
+            {/* Chord grid preview (first 32 beats) */}
+            <div className="card">
+              <p className="font-bold mb-1">Chord Preview <span className="text-slate-400 font-normal text-sm">(first 32 beats)</span></p>
+              <p className="text-slate-400 text-xs mb-4">Save to library to access full sync player</p>
+              <div className="grid grid-cols-8 gap-1.5">
+                {result.chords.slice(0,32).map((c,i) => (
+                  <div key={i} className={`beat-box text-xs font-bold ${ c.chord ? '' : 'opacity-30' }`}>
+                    {c.chord || '—'}
+                    <span className="beat-num">{i+1}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Unique chord details */}
-            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-6">
-              <p className="font-bold mb-4">Detail Chord</p>
-              <div className="flex gap-3 flex-wrap">
-                {[...new Set(result.chords)].map(c => (
-                  <div key={c} className="bg-white border border-[#E2E8F0] rounded-2xl px-4 py-3 text-center hover:border-[#4F8CFF] transition min-w-[80px]">
-                    <p className="font-black text-lg gradient-text">{c}</p>
-                    <p className="text-[#94A3B8] text-xs mt-0.5">{CHORD_NOTES[c] || '—'}</p>
-                  </div>
+            {/* Unique chords */}
+            <div className="card">
+              <p className="font-bold mb-3">Chords Found</p>
+              <div className="flex flex-wrap gap-2">
+                {[...new Set(result.chords.filter(c=>c.chord).map(c=>c.chord))].map(c => (
+                  <span key={c} className="bg-green-50 border border-green-200 text-green-800 font-bold px-4 py-2 rounded-xl text-sm">{c}</span>
                 ))}
               </div>
             </div>
 
             {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm">{error}</div>}
 
-            {/* ACTIONS */}
-            <div className="flex gap-3 flex-wrap">
-              <button onClick={reset}
-                className="bg-[#F1F5F9] border border-[#E2E8F0] text-[#475569] rounded-2xl px-5 py-3 font-semibold text-sm hover:border-[#4F8CFF] hover:text-[#4F8CFF] transition">
-                Analisis Ulang
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={reset} className="flex-1 bg-white border border-green-200 text-slate-600 rounded-2xl py-3 font-semibold text-sm hover:border-blue-300 transition">
+                Analyze Another
               </button>
-              <Link href="/library"
-                className="bg-white border border-[#E2E8F0] text-[#0F172A] rounded-2xl px-5 py-3 font-semibold text-sm hover:border-[#4F8CFF] transition">
-                Lihat Library
-              </Link>
               {!saved ? (
-                <button onClick={handleSave} disabled={saving}
-                  className="bg-gradient-to-r from-[#4F8CFF] to-[#7C3AED] text-white rounded-2xl px-6 py-3 font-bold text-sm hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2">
-                  {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  Simpan ke Library
+                <button onClick={handleSave} disabled={saving} className="flex-1 grad-btn rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2">
+                  {saving && <svg className="w-4 h-4 spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>}
+                  {saving ? 'Saving...' : 'Save to Library & Play'}
                 </button>
               ) : (
-                <div className="bg-green-50 border border-green-200 text-green-700 rounded-2xl px-5 py-3 font-semibold text-sm flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                  Tersimpan! Mengarahkan ke library...
+                <div className="flex-1 bg-green-50 border border-green-300 text-green-700 rounded-2xl py-3 font-semibold text-sm flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                  Saved! Redirecting...
                 </div>
               )}
             </div>
