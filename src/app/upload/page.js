@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { analyzeAudio } from '../../lib/chordDetector'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -24,22 +25,20 @@ export default function UploadPage() {
 
   const handleAnalyze = async () => {
     if (!file) return
-    setError(''); setStep(2); setProgress(10)
-    setProgressLabel('Uploading audio…')
+    setError(''); setStep(2); setProgress(0)
     try {
-      const form = new FormData()
-      form.append('file', file)
-      form.append('title', file.name.replace(/\.[^.]+$/, ''))
-
-      setProgress(20); setProgressLabel('Extracting CQT chroma…')
-      const res = await fetch('/api/analyze', { method: 'POST', body: form })
-
-      setProgress(80); setProgressLabel('Decoding chords…')
+      const onProgress = (label, pct) => { setProgressLabel(label); setProgress(pct) }
+      const result = await analyzeAudio(file, onProgress)
+      onProgress('Saving to library…', 97)
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: file.name.replace(/\.[^.]+$/, ''), ...result })
+      })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Analysis failed')
-
+      if (!res.ok || data.error) throw new Error(data.error || 'Save failed')
       sessionStorage.setItem(`audio_${data.songId}`, URL.createObjectURL(file))
-      setProgress(100); setProgressLabel('Done!')
+      onProgress('Done!', 100)
       setTimeout(() => router.push(`/songs/${data.songId}`), 500)
     } catch (err) {
       setError(err.message); setStep(1)
@@ -112,8 +111,8 @@ export default function UploadPage() {
               )}
             </div>
             <div className="mt-5 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
-              <p className="text-slate-600 text-xs font-semibold mb-0.5">⚡ Powered by librosa CQT + Viterbi HMM</p>
-              <p className="text-slate-400 text-xs">CQT chroma · beat-synced · music-theory transition matrix</p>
+              <p className="text-slate-600 text-xs font-semibold mb-0.5">⚡ Pitch-first · Processed in your browser</p>
+              <p className="text-slate-400 text-xs">FFT peak picking → MIDI notes → chord names. No templates.</p>
             </div>
             <button onClick={handleAnalyze} disabled={!file} className="btn-primary w-full py-3 rounded-xl mt-4 text-sm">
               Analyze Song
@@ -131,7 +130,7 @@ export default function UploadPage() {
             </div>
             <h2 className="text-xl font-black mb-2">Analyzing your song…</h2>
             <p className="text-slate-500 text-sm mb-1 font-medium">{progressLabel}</p>
-            <p className="text-slate-300 text-xs mb-8">librosa CQT + Viterbi decoder · 10–30s</p>
+            <p className="text-slate-300 text-xs mb-8">Detecting pitches beat-by-beat · 30–60s</p>
             <div className="max-w-xs mx-auto">
               <div className="prog-track h-2 mb-2">
                 <div className="prog-fill h-full" style={{width:`${progress}%`}}/>
