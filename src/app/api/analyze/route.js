@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+export const maxDuration = 60
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const body = await request.json()
-    const { title, filename, key, scale, bpm, chords, chordData, totalDuration, totalBeats } = body
+    const body = await req.json()
+    const { title, chordData, bpm, key, scale, totalDuration, totalBeats } = body
 
     if (!chordData || !Array.isArray(chordData)) {
       return NextResponse.json({ error: 'No chord data provided' }, { status: 400 })
@@ -22,7 +24,6 @@ export async function POST(request) {
       .insert({
         user_id: '00000000-0000-0000-0000-000000000000',
         title: title || 'Untitled',
-        filename: filename || title || 'Untitled',
         key_note: key || 'C',
         key_scale: scale || 'major',
         bpm: bpm || 120,
@@ -31,13 +32,13 @@ export async function POST(request) {
         total_duration: totalDuration || 0,
         total_beats: totalBeats || 0,
       })
-      .select()
-      .single()
+      .select().single()
 
     if (dbErr) throw dbErr
+
     return NextResponse.json({ songId: saved.id })
   } catch (err) {
-    console.error('Save error:', err)
+    console.error(err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

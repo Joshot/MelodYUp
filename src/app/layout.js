@@ -1,8 +1,8 @@
 import './globals.css'
 export const dynamic = 'force-dynamic'
 export const metadata = {
-  title: 'MelodYUp — Chord & Melody Analyzer',
-  description: 'Upload any song. Get every chord, synced live.',
+  title: 'MelodYUp — Chord Analyzer',
+  description: 'Upload any song and get chord detection synced live with your audio.',
 }
 export default function RootLayout({ children }) {
   return (
@@ -10,7 +10,7 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="true" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap" rel="stylesheet" />
       </head>
       <body>{children}</body>
     </html>
