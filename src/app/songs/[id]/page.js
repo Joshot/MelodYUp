@@ -10,18 +10,18 @@ const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 
 function parseRoot(chord) {
   if (!chord) return ''
-  const ENARH = {Db:'C#',Eb:'D#',Gb:'F#',Ab:'G#',Bb:'A#'}
   const r = chord.length > 1 && chord[1] === '#' ? chord.slice(0,2) : chord[0]
+  const ENARH = {Db:'C#',Eb:'D#',Gb:'F#',Ab:'G#',Bb:'A#'}
   return ENARH[r] || r
 }
 
 function transposeChord(chord, n) {
   if (!chord || n === 0) return chord
   const root = parseRoot(chord)
-  const isMin = chord.length > root.length && chord.slice(root.length) === 'm'
+  const suffix = chord.slice(root.length)
   const idx = NOTES.indexOf(root)
   if (idx < 0) return chord
-  return NOTES[(idx + n + 12) % 12] + (isMin ? 'm' : '')
+  return NOTES[(idx + n + 12) % 12] + suffix
 }
 
 function transposeNote(note, n) {
@@ -32,15 +32,15 @@ function transposeNote(note, n) {
 
 function nashville(chord, keyNote, keyScale) {
   const root = parseRoot(chord)
-  const isMin = chord.length > root.length
+  const suffix = chord.slice(root.length)
   const ki = NOTES.indexOf(keyNote), ci = NOTES.indexOf(root)
   if (ki < 0 || ci < 0) return ''
   const interval = (ci - ki + 12) % 12
   const mj = {0:'1',2:'2',4:'3',5:'4',7:'5',9:'6',11:'7'}
   const mn = {0:'1',2:'2',3:'3',5:'4',7:'5',8:'6',10:'7'}
   const map = keyScale === 'major' ? mj : mn
-  const n2 = map[interval] || ''
-  return n2 ? (isMin ? n2+'m' : n2) : ''
+  const n2 = map[interval]
+  return n2 ? n2 + suffix : ''
 }
 
 export default function SongPage() {
@@ -81,7 +81,7 @@ export default function SongPage() {
     const bd = 60 / (song.bpm || 120)
     const onTime = () => { setCurrentTime(audio.currentTime); setCurrentBeat(Math.floor(audio.currentTime / bd)) }
     const onMeta = () => setDuration(audio.duration || 0)
-    const onEnd = () => { setIsPlaying(false); setCurrentBeat(-1) }
+    const onEnd  = () => { setIsPlaying(false); setCurrentBeat(-1) }
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('loadedmetadata', onMeta)
     audio.addEventListener('ended', onEnd)
@@ -92,7 +92,6 @@ export default function SongPage() {
     }
   }, [song, audioRef.current])
 
-  // Auto-scroll active beat
   useEffect(() => {
     if (currentBeat < 0 || !gridRef.current) return
     const el = gridRef.current.querySelector(`[data-beat="${currentBeat}"]`)
@@ -108,7 +107,6 @@ export default function SongPage() {
   const seekToBeat = (beat) => {
     const a = audioRef.current; if (!a || !song) return
     a.currentTime = beat * (60 / (song.bpm || 120))
-    setCurrentBeat(beat)
     if (!isPlaying) { a.play().catch(()=>{}); setIsPlaying(true) }
   }
 
@@ -121,8 +119,7 @@ export default function SongPage() {
 
   const saveNote = async () => {
     await supabase.from('songs').update({ notes: noteText }).eq('id', id)
-    setSong(s => ({ ...s, notes: noteText }))
-    setEditNote(false)
+    setSong(s=>({...s, notes: noteText})); setEditNote(false)
   }
 
   const deleteSong = async () => {
@@ -135,14 +132,14 @@ export default function SongPage() {
 
   if (loading) return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-slate-200 border-t-emerald-500 rounded-full spin" />
+      <div className="w-8 h-8 border-4 border-slate-200 border-t-emerald-500 rounded-full spin"/>
     </div>
   )
 
   const chords = song?.chord_data || []
   const BEATS_PER_BAR = 8
   const bars = []
-  for (let i = 0; i < chords.length; i += BEATS_PER_BAR) bars.push(chords.slice(i, i + BEATS_PER_BAR))
+  for (let i=0; i<chords.length; i+=BEATS_PER_BAR) bars.push(chords.slice(i, i+BEATS_PER_BAR))
   const dispKey = transposeNote(song?.key_note, transpose)
 
   const disp = (chord) => {
@@ -151,8 +148,11 @@ export default function SongPage() {
     return showNash ? (nashville(t, dispKey, song?.key_scale) || t) : t
   }
 
+  // Detect chord change beats for indicator
+  const chordChanges = new Set(chords.filter(c=>c.chordDisplay).map(c=>c.beat))
+
   return (
-    <div className="min-h-screen bg-[#f8fafc]" onClick={() => showMenu && setShowMenu(false)}>
+    <div className="min-h-screen bg-[#f8fafc]" onClick={()=>showMenu&&setShowMenu(false)}>
       {/* NAV */}
       <nav className="bg-white border-b border-slate-100 px-4 sm:px-6 py-3.5 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-2">
@@ -166,34 +166,32 @@ export default function SongPage() {
           </Link>
         </div>
         <p className="font-bold text-sm truncate max-w-[160px] sm:max-w-sm text-slate-800">{song?.title}</p>
-        <div className="relative" onClick={e => e.stopPropagation()}>
-          <button onClick={() => setShowMenu(v=>!v)} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition">
+        <div className="relative" onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>setShowMenu(v=>!v)} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
           </button>
           {showMenu && (
             <div className="absolute right-0 top-10 bg-white border border-slate-100 rounded-2xl shadow-xl p-3 w-56 z-50">
-              <button onClick={() => { setShowNash(v=>!v); setShowMenu(false) }}
+              <button onClick={()=>{setShowNash(v=>!v);setShowMenu(false)}}
                 className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm flex items-center justify-between font-medium">
                 Nashville Numbers
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${ showNash?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-400' }`}>{showNash?'ON':'OFF'}</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${showNash?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-400'}`}>{showNash?'ON':'OFF'}</span>
               </button>
-              <div className="my-2 border-t border-slate-50" />
+              <div className="my-2 border-t border-slate-50"/>
               <div className="px-3 pb-2">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Transpose</p>
                 <div className="flex items-center justify-between">
-                  <button onClick={() => setTranspose(v=>Math.max(v-1,-6))} className="w-8 h-8 bg-slate-50 hover:bg-slate-100 rounded-lg font-bold text-slate-600 transition text-lg leading-none">−</button>
+                  <button onClick={()=>setTranspose(v=>Math.max(v-1,-6))} className="w-8 h-8 bg-slate-50 hover:bg-slate-100 rounded-lg font-bold text-slate-600 transition text-lg">−</button>
                   <div className="text-center">
                     <p className="font-black text-sm">{transpose>0?`+${transpose}`:transpose}</p>
                     <p className="text-xs text-slate-400">{dispKey} {song?.key_scale}</p>
                   </div>
-                  <button onClick={() => setTranspose(v=>Math.min(v+1,6))} className="w-8 h-8 bg-slate-50 hover:bg-slate-100 rounded-lg font-bold text-slate-600 transition text-lg leading-none">+</button>
+                  <button onClick={()=>setTranspose(v=>Math.min(v+1,6))} className="w-8 h-8 bg-slate-50 hover:bg-slate-100 rounded-lg font-bold text-slate-600 transition text-lg">+</button>
                 </div>
               </div>
-              <div className="my-2 border-t border-slate-50" />
-              <button onClick={() => { setShowDel(true); setShowMenu(false) }}
-                className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-red-50 text-red-500 text-sm font-medium">
-                Delete Song
-              </button>
+              <div className="my-2 border-t border-slate-50"/>
+              <button onClick={()=>{setShowDel(true);setShowMenu(false)}}
+                className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-red-50 text-red-500 text-sm font-medium">Delete Song</button>
             </div>
           )}
         </div>
@@ -203,7 +201,7 @@ export default function SongPage() {
 
         {/* PLAYER */}
         <div className="card">
-          <audio ref={audioRef} src={audioUrl || undefined} preload="auto" />
+          <audio ref={audioRef} src={audioUrl||undefined} preload="auto"/>
           {!audioUrl ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex-1">
@@ -225,15 +223,14 @@ export default function SongPage() {
               </button>
               <div className="flex-1 min-w-0">
                 <input type="range" min="0" max={duration||0} step="0.05" value={currentTime}
-                  onChange={e => { if(audioRef.current) audioRef.current.currentTime = +e.target.value }}
+                  onChange={e=>{if(audioRef.current)audioRef.current.currentTime=+e.target.value}}
                   className="w-full h-1.5 accent-emerald-500 cursor-pointer"
                 />
                 <div className="flex justify-between text-xs text-slate-400 mt-1">
-                  <span>{fmt(currentTime)}</span>
-                  <span>{fmt(duration)}</span>
+                  <span>{fmt(currentTime)}</span><span>{fmt(duration)}</span>
                 </div>
               </div>
-              <label className="cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg text-slate-300 hover:text-slate-500 transition" title="Change file">
+              <label className="cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg text-slate-300 hover:text-slate-500 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                 <input type="file" accept="audio/*" className="hidden" onChange={e=>loadFile(e.target.files[0])}/>
               </label>
@@ -253,8 +250,8 @@ export default function SongPage() {
             <p className="text-2xl font-black gradient-text">{song?.bpm}</p>
           </div>
           <div className="card text-center">
-            <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1">Beats</p>
-            <p className="text-2xl font-black gradient-text">{song?.total_beats}</p>
+            <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1">Duration</p>
+            <p className="text-2xl font-black gradient-text">{song?.total_duration ? fmt(song.total_duration) : '—'}</p>
           </div>
         </div>
 
@@ -263,36 +260,39 @@ export default function SongPage() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="font-bold text-sm">Chord Grid</p>
-              <p className="text-slate-400 text-xs">8 beats/bar · Click to jump & play</p>
+              <p className="text-slate-400 text-xs">8 beats/bar · tap to jump</p>
             </div>
             <button
-              onClick={() => setShowNash(v=>!v)}
+              onClick={()=>setShowNash(v=>!v)}
               className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition ${
-                showNash ? 'btn-primary border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                showNash?'btn-primary border-transparent':'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
               }`}
-            >
-              {showNash ? 'Nashville ON' : 'Nashville'}
-            </button>
+            >{showNash?'Nashville ON':'Nashville'}</button>
           </div>
-          <div ref={gridRef} className="space-y-1.5 overflow-y-auto max-h-[52vh] pr-1">
+
+          <div ref={gridRef} className="space-y-1 overflow-y-auto max-h-[52vh] pr-1">
             {bars.map((bar, bi) => (
-              <div key={bi} className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-200 font-medium w-4 text-right flex-shrink-0">{bi+1}</span>
-                <div className="grid flex-1 gap-1" style={{ gridTemplateColumns: `repeat(${bar.length},1fr)` }}>
+              <div key={bi} className="flex items-stretch gap-1">
+                {/* Bar number — small, unobtrusive */}
+                <span className="text-[10px] text-slate-200 font-medium w-4 text-right flex-shrink-0 pt-2">{bi+1}</span>
+                <div className="grid flex-1 gap-1" style={{gridTemplateColumns:`repeat(${bar.length},1fr)`}}>
                   {bar.map((beat, bib) => {
-                    const gb = bi * BEATS_PER_BAR + bib
-                    const isActive = gb === currentBeat && !!audioUrl && isPlaying
-                    const label = beat?.chordDisplay !== undefined ? disp(beat.chordDisplay) : disp(beat?.chord)
-                    const hasChord = !!beat?.chordDisplay
+                    const gb = bi*BEATS_PER_BAR+bib
+                    const isActive = gb===currentBeat && !!audioUrl && isPlaying
+                    const isChange = chordChanges.has(gb)
+                    const label = disp(beat?.chordDisplay !== undefined ? beat.chordDisplay : beat?.chord)
                     return (
                       <div
                         key={bib}
                         data-beat={gb}
-                        onClick={() => seekToBeat(gb)}
-                        className={`beat-cell ${ isActive ? 'active' : hasChord ? 'has-chord' : '' }`}
+                        onClick={()=>seekToBeat(gb)}
+                        className={`beat-cell relative ${ isActive?'active': isChange&&beat?.chordDisplay?'has-chord':'' }`}
                       >
+                        {/* Chord change indicator dot — only on first beat of new chord */}
+                        {isChange && beat?.chordDisplay && !isActive && (
+                          <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400"/>
+                        )}
                         <span className="text-xs font-black leading-none">{label}</span>
-                        <span className="beat-num">{gb+1}</span>
                       </div>
                     )
                   })}
@@ -304,11 +304,47 @@ export default function SongPage() {
 
         {/* UNIQUE CHORDS */}
         <div className="card">
-          <p className="font-bold text-sm mb-3">Chords</p>
+          <p className="font-bold text-sm mb-3">Chords in this song</p>
           <div className="flex flex-wrap gap-2">
-            {[...new Set(chords.filter(c=>c.chord).map(c=>disp(c.chord)))].filter(Boolean).map(c => (
+            {[...new Set(chords.filter(c=>c.chord).map(c=>disp(c.chord)))].filter(Boolean).map(c=>(
               <span key={c} className="bg-slate-50 border border-slate-200 text-slate-700 font-bold px-3.5 py-1.5 rounded-xl text-sm">{c}</span>
             ))}
+          </div>
+        </div>
+
+        {/* CHORD CHANGES TIMELINE */}
+        <div className="card">
+          <p className="font-bold text-sm mb-3">Chord Changes</p>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {chords.filter(c=>c.chordDisplay).map((c,i,arr)=>{
+              // How many beats this chord lasts
+              const nextChange = arr[i+1]
+              const beatsHeld = nextChange ? nextChange.beat - c.beat : (song?.total_beats||0) - c.beat
+              const timeStr = `${Math.floor(c.time/60)}:${String(Math.floor(c.time%60)).padStart(2,'0')}`
+              return (
+                <div key={c.beat}
+                  onClick={()=>seekToBeat(c.beat)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer hover:bg-slate-50 transition ${
+                    c.beat===currentBeat||(
+                      currentBeat>=c.beat&&(nextChange?currentBeat<nextChange.beat:true)
+                    )?'bg-emerald-50 border border-emerald-100':''
+                  }`}
+                >
+                  <span className="text-xs text-slate-300 w-8 text-right flex-shrink-0">{timeStr}</span>
+                  <span className="font-black text-sm flex-shrink-0 w-14">{disp(c.chordDisplay)}</span>
+                  <div className="flex-1 flex items-center gap-1">
+                    {/* Beat dots — show how many beats chord lasts */}
+                    {Array.from({length:Math.min(beatsHeld,16)}).map((_,di)=>(
+                      <span key={di} className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        di===0?'bg-emerald-400':'bg-slate-200'
+                      }`}/>
+                    ))}
+                    {beatsHeld>16&&<span className="text-slate-300 text-xs">+{beatsHeld-16}</span>}
+                  </div>
+                  <span className="text-slate-300 text-xs flex-shrink-0">{beatsHeld}b</span>
+                </div>
+              )
+            })}
           </div>
         </div>
 
@@ -316,14 +352,12 @@ export default function SongPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-2">
             <p className="font-bold text-sm">My Notes</p>
-            {!editNote && (
-              <button onClick={() => setEditNote(true)} className="text-xs text-blue-500 hover:text-blue-600 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition">Edit</button>
-            )}
+            {!editNote&&<button onClick={()=>setEditNote(true)} className="text-xs text-blue-500 hover:text-blue-600 font-medium px-2 py-1 rounded-lg hover:bg-blue-50 transition">Edit</button>}
           </div>
           {editNote ? (
             <>
               <textarea value={noteText} onChange={e=>setNoteText(e.target.value)}
-                placeholder="Add fingerings, capo position, tips..." rows={3}
+                placeholder="Fingerings, capo, tips…" rows={3}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none bg-slate-50"
               />
               <div className="flex gap-2 mt-2">
@@ -333,12 +367,12 @@ export default function SongPage() {
             </>
           ) : (
             <p className="text-slate-500 text-sm leading-relaxed min-h-[20px]">
-              {song?.notes || <span className="text-slate-300 text-xs">No notes yet.</span>}
+              {song?.notes||<span className="text-slate-300 text-xs">No notes yet.</span>}
             </p>
           )}
         </div>
 
-        {/* INFO */}
+        {/* SONG INFO */}
         <div className="card mb-6">
           <p className="font-bold text-sm mb-3">Song Info</p>
           <div className="space-y-2">
@@ -346,9 +380,10 @@ export default function SongPage() {
               ['Title', song?.title],
               ['Key', `${dispKey} ${song?.key_scale}`],
               ['BPM', song?.bpm],
-              ['Duration', song?.total_duration ? `${Math.floor(song.total_duration/60)}:${String(Math.floor(song.total_duration%60)).padStart(2,'0')}` : '—'],
+              ['Duration', song?.total_duration ? fmt(song.total_duration) : '—'],
+              ['Total beats', song?.total_beats],
               ['Analyzed', new Date(song?.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})],
-            ].map(([k,v]) => (
+            ].map(([k,v])=>(
               <div key={k} className="flex justify-between text-sm">
                 <span className="text-slate-400">{k}</span>
                 <span className="font-semibold text-slate-700">{v}</span>
